@@ -149,8 +149,9 @@ let b:jcommenter_add_empty_line = 1
 " Summary:       Functions for documenting java-code
 " Author:        Kalle Björklid <bjorklid@st.jyu.fi>
 " Last Modified: 29.12.2002
-" Version:       1.3
+" Version:       1.3.1
 " Modifications:
+"  1.3.1 : Fixed two bugs concerning the modifications of 1.3-version.
 "  1.3   : Added check to see whether the script is already loaded
 "          Option to have an empty line automatically added before the
 "            generated comment if there was none previously. See config
@@ -309,7 +310,7 @@ let b:jcommenter_add_empty_line = 1
 "       public aVeryLongMethod() {
 "           ...
 "       } // END: aVeryLongMethod
-" - Sycle through incomplete comments using SearchInvalidComment-method.
+" - Cycle through incomplete comments using SearchInvalidComment-method.
 "   If you use the default mappings, use <M-n> to go to next incomplete
 "   comment, and <M-p> to go to previous one. Handy when finding 
 "   incomplete comments, and completing a template just generated (don't
@@ -416,7 +417,9 @@ function! JCommentWriter() range
   elseif s:IsMethod()
     let s:debugstring = s:debugstring . 'isMethod '
     call s:WriteMethodComments()
-    call s:AddEmpty()
+    if s:method_comment_update_only == 0
+      call s:AddEmpty()
+    endif
   elseif s:IsClass()
     call s:WriteClassComments()
     call s:AddEmpty()
@@ -439,7 +442,7 @@ endfunction
 
 fun! s:AddEmpty()
   if exists("b:jcommenter_add_empty_line") && b:jcommenter_add_empty_line
-    if getline(a:firstline) !~ '^\s*$'
+    if getline(a:firstline - 2) !~ '^\s*$'
       let s:appendPos = a:firstline - 2
       call s:AppendStr("")
     endif
@@ -684,8 +687,10 @@ function! s:WriteMethodComments()
   let s:linesAppended = 0
 
   let existingDocCommentType = s:HasDocComments()
+  let s:method_comment_update_only = 0
   
   if existingDocCommentType && exists("b:jcommenter_update_comments") && b:jcommenter_update_comments
+    let s:method_comment_update_only = 1
     if existingDocCommentType == 1 
       call s:ExpandSinglelineCommentsEx(s:singleLineCommentPos, 1)
     endif
