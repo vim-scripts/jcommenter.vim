@@ -94,12 +94,14 @@ let b:jcommenter_remove_tags_on_update = 0
 
 " --- cut here (configuration) ---
 
-" File: jcommenter.vim
-" Summary: Functions for documenting java-code
-" Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 14.8.2001
-" Version: 1.11
+" File:          jcommenter.vim
+" Summary:       Functions for documenting java-code
+" Author:        Kalle Björklid <bjorklid@st.jyu.fi>
+" Last Modified: 16.10.2001
+" Version:       1.12
 " Modifications:
+"  1.12: Fixed a bug where all methods were interpreted as constructors
+"        if 'ignorecase' was on. Thanks to David Menuhin for debugging this.
 "  1.11: Fixed a bug where the end part of the whole buffer was sometimes
 "        deleted when updating w/ the b:jcommenter_remove_tags_on_update
 "        enabled.
@@ -286,13 +288,19 @@ let s:docCommentEnd   = -1
 " ===================================================
 
 function! JCommentWriter() range
+  let s:oldICValue = &ignorecase
+  let &ignorecase = 0
+
   let s:rangeStart = a:firstline
   let s:rangeEnd = a:lastline
   let s:combinedString = s:GetCombinedString(s:rangeStart, s:rangeEnd)
 
+  let s:debugstring = ''
+
   if s:IsFileComments()
     call s:WriteFileComments()
   elseif s:IsMethod()
+    let s:debugstring = s:debugstring . 'isMethod '
     call s:WriteMethodComments()
   elseif s:IsClass()
     call s:WriteClassComments()
@@ -303,6 +311,10 @@ function! JCommentWriter() range
   elseif s:IsVariable()
     call s:WriteFieldComments()
   endif
+  
+  " echo s:debugstring
+
+  let &ignorecase = s:oldICValue
 endfunction
 
 " ===================================================
@@ -539,6 +551,7 @@ function! s:WriteMethodComments()
 
   if s:method_returnValue != ''
     call s:AppendStr(' * @return ')
+    let s:debugstring = s:debugstring . 'wroteReturnTag '
   endif
 
   if exists("b:jcommenter_use_exception_tag") && b:jcommenter_use_exception_tag
@@ -685,6 +698,14 @@ function! s:ResolveMethodParams(methodHeader)
 
   let preNameString = substitute(methodHeader, '^\(\(.*\)\s\)' . s:javaname . '\s*(.*', '\1', '')
   let s:method_returnValue = substitute(preNameString, '\(.*\s\|^\)\(' . s:javaname . '\(\s*\[\s*\]\)*\)\s*$', '\2', '')
+  
+  if s:method_returnValue == ''
+    let s:debugstring = s:debugstring . 'isEmpty '
+  endif
+
+  if s:method_returnValue == 'void'
+    let s:debugstring = s:debugstring . 'isVoid'
+  endif 
 
   if s:method_returnValue == 'void' || s:IsConstructor(methodHeader)
     let s:method_returnValue = ''
@@ -700,6 +721,9 @@ function! s:ResolveMethodParams(methodHeader)
 endfunction
 
 function! s:IsConstructor(methodHeader)
+  if a:methodHeader =~ '\(^\|\s\)[A-Z][a-zA-Z0-9]*\s*('
+    let s:debugstring = s:debugstring . 'IsConstructor'
+  endif
   return a:methodHeader =~ '\(^\|\s\)[A-Z][a-zA-Z0-9]*\s*('
 endfunction
 
