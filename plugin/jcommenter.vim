@@ -64,7 +64,7 @@ let b:jcommenter_file_author = ''
 let b:jcommenter_file_copyright = ''
 
 " Change this to true, if you want to use "@exception" instead of "@throws".
-let b:jcommenter_use_exception_tag = 0
+let b:jcommenter_use_exception_tag = 1
 
 " set to true if you don't like the automatically added "created"-time
 let b:jcommenter_file_noautotime = 0 
@@ -97,9 +97,12 @@ let b:jcommenter_remove_tags_on_update = 0
 " File: jcommenter.vim
 " Summary: Functions for documenting java-code
 " Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 12.8.2001
-" Version: 1.1
+" Last Modified: 14.8.2001
+" Version: 1.11
 " Modifications:
+"  1.11: Fixed a bug where the end part of the whole buffer was sometimes
+"        deleted when updating w/ the b:jcommenter_remove_tags_on_update
+"        enabled.
 "  1.1 : Can now choose between '@throws' and '@exception' tags.
 "        When executed on single-line comments ("/** blah blah */") expands
 "            them into multiline comments preserving the text
@@ -442,7 +445,7 @@ function! s:RemoveTag(rangeStart, rangeEnd, tagName, tagParam)
   endif
   let tagEndPos = s:FindAnyTag(tagStartPos + 1, a:rangeEnd)
   if tagEndPos == -1
-    tagEndPos = s:docCommentEnd - 1
+    let tagEndPos = s:docCommentEnd - 1
   endif
   let linesToDelete = tagEndPos - tagStartPos
   exe "normal " . tagStartPos . "G" . linesToDelete . "dd"
