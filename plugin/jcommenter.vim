@@ -128,6 +128,10 @@ let b:jcommenter_update_comments = 1
 " b:jcommenter_update_comments is enabled.
 let b:jcommenter_remove_tags_on_update = 1
 
+" Whether to prepend an empty line before the generated comment, if the
+" line just above the comment would otherwise be non-empty.
+let b:jcommenter_add_empty_line = 1
+
 " Uncomment and modify if you're not happy with the default file
 " comment-template:
 "function! JCommenter_OwnFileComments()
@@ -144,9 +148,13 @@ let b:jcommenter_remove_tags_on_update = 1
 " File:          jcommenter.vim
 " Summary:       Functions for documenting java-code
 " Author:        Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 18.11.2001
-" Version:       1.2.1
+" Last Modified: 29.12.2002
+" Version:       1.3
 " Modifications:
+"  1.3   : Added check to see whether the script is already loaded
+"          Option to have an empty line automatically added before the
+"            generated comment if there was none previously. See config
+"            ("b:jcommenter_add_empty_line").
 "  1.2.1 : When executed on last line (must be empty), modeline gets generated.
 "          Option to have default @return, @param etc. values. see config.
 "          Option to have space between "Tag groups"
@@ -350,8 +358,13 @@ let b:jcommenter_remove_tags_on_update = 1
 
 
 " THE SCRIPT
-"
-"
+
+" Load only once:
+if exists("b:did_javacom")
+  finish
+endif
+let b:did_javacom = 1
+
 " varible that tells what is put before the written string when using
 " the AppendStr-function.
 let s:indent = ''
@@ -403,14 +416,17 @@ function! JCommentWriter() range
   elseif s:IsMethod()
     let s:debugstring = s:debugstring . 'isMethod '
     call s:WriteMethodComments()
+    call s:AddEmpty()
   elseif s:IsClass()
     call s:WriteClassComments()
+    call s:AddEmpty()
   elseif s:IsSinglelineComment()
     call s:ExpandSinglelineComments(s:rangeStart)
   elseif s:IsCommentTag()
     call s:WriteCopyOfTag()
   elseif s:IsVariable()
     call s:WriteFieldComments()
+    call s:AddEmpty()
   else
     call s:Message('Nothing to do')
   endif
@@ -420,6 +436,15 @@ function! JCommentWriter() range
   let &ignorecase = s:oldICValue
   let b:jcommenter_lines_appended = s:linesAppended
 endfunction
+
+fun! s:AddEmpty()
+  if exists("b:jcommenter_add_empty_line") && b:jcommenter_add_empty_line
+    if getline(a:firstline) !~ '^\s*$'
+      let s:appendPos = a:firstline - 2
+      call s:AppendStr("")
+    endif
+  endif
+endfun
 
 
 " ===================================================
