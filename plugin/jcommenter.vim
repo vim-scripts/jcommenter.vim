@@ -329,7 +329,8 @@ function! WriteMethodComments(argm)
 
 	" write the parameters: 
 	let brackets = '\s*\(\[\s*\]\)'
-	let paramStartPat = '^\s*[a-zA-Z][a-zA-Z0-9]*\(\s*\[\s*\]\)\=\s\+'
+	let finalParamPat = '^\s*final\s\+'
+	let paramStartPat = '^\s*\(final\s\+\)\=[a-zA-Z][a-zA-Z0-9]*\(\s*\[\s*\]\)\=\s\+'
 	" can end w/ ',' or '[] ,' or '[]' or paramEndPat might be -1 (this is handled later)
 	let paramEndPat = brackets . '\=\s*,\|' . brackets .'\s*$'
 	" parameterlist is now like this: 'type1 param1, type2 param2, ...'
@@ -347,6 +348,10 @@ function! WriteMethodComments(argm)
 		endif
 	
 		let param = strpart(parameterlist, paramStartPos, paramEndPos - paramStartPos)
+		let paramFinalEndPos = matchend(param, finalParamPat)
+		if paramFinalEndPos >= 0
+			let param = strpart(param, paramFinalEndPos, strlen(param) - paramFinalEndPos)
+		endif
 		call append(linenum, indentStr . ' @param ' . param)
 		let linenum = linenum + 1
 		let parameterlist = strpart(parameterlist, paramEndPos + 1, strlen(parameterlist) - paramEndPos)
