@@ -1,9 +1,111 @@
+" NOTE: Here begins the configuration script for the JCommenter. I Have merged
+" it into the script because vim.sourceforge.net's download function seems 
+" to rename the file allways to "jcommenter.vim", so using a .zip or .tar-file
+" would cause unnecessary confusion. It is a good idea to copy-paste the
+" configuration part to another file, as you might want to preserve it for
+" the next version.
+" See below for the real script description
+
+" --- cut here (configuration) ---
+
+" Configuration file for jcommenter
+"
+" Copy the necessary contents from this file to your .vimrc, or modify this
+" file and add a source command to vimrc to read this file.
+
+" map the commenter:
+map <M-c> :call JCommentWriter()<CR>
+
+" Move cursor to the place where inserting comments supposedly should start
+let b:jcommenter_move_cursor = 1
+
+" Defines whether to move the cursor to the line which has "/**", or the line
+" after that (effective only if b:jcommenter_move_cursor is enabled)
+let b:jcommenter_description_starts_from_first_line = 0
+
+" Start insert mode after calling the commenter. Effective only if 
+" b:jcommenter_move_cursor is enabled.
+let b:jcommenter_autostart_insert_mode = 1
+
+" The number of empty rows (containing only the star) to be added for the 
+" description of the method
+let b:jcommenter_method_description_space = 2
+
+" The number of empty rows (containing only the star) to be added for the´
+" description of the field. Can be also -1, which means that "/**  */" is added
+" above the field declaration 
+let b:jcommenter_field_description_space = 1
+
+" The number of empty rows (containing only the star) to be added for the 
+" description of the class
+let b:jcommenter_class_description_space = 2
+
+" If this option is enabled, and a method has no exceptions, parameters or
+" return value, the space for the description of that method is allways one
+" row. This is handy if you want to keep an empty line between the description
+" and the tags (as is defined in Sun's java code conventions)
+let b:jcommenter_smart_method_description_spacing = 1
+
+" the default content for the author-tag of class-comments. Leave empty to add
+" just the empty tag, or outcomment to prevent author tag generation
+let b:jcommenter_class_author = ''
+
+" the default content for the version-tag of class-comments. Leave empty to add
+" just the empty tag, or outcomment to prevent version tag generation
+let b:jcommenter_class_version = ''
+
+" The default author added to the file comments. leave empty to add just the
+" field where the autor can be added, or outcomment to remove it.
+let b:jcommenter_file_author = ''
+
+" The default copyright holder added to the file comments. leave empty to
+" add just the field where the copyright info can be added, or outcomment
+" to remove it.
+let b:jcommenter_file_copyright = ''
+
+" Change this to true, if you want to use "@exception" instead of "@throws".
+let b:jcommenter_use_exception_tag = 0
+
+" set to true if you don't like the automatically added "created"-time
+let b:jcommenter_file_noautotime = 0 
+
+" define whether jcommenter tries to parse and update the existing Doc-comments
+" on the item it was executed on. If this feature is disabled, a completely new
+" comment-template is written
+let b:jcommenter_update_comments = 1
+
+" define wheter jcommenter should remove old tags (eg. if the return value was
+" changed from int to void). At this point, this works only on @return-tag as
+" there can exist only on return-tag, and thus it was easy to implement. This
+" feature (as the other new features) is not throughly tested, and might delete
+" something it was not supposed to, so use with care. Only applicable if 
+" b:jcommenter_update_comments is enabled.
+let b:jcommenter_remove_tags_on_update = 0
+
+" Uncomment and modify if you're not happy with the default file
+" comment-template:
+"function! JCommenter_OwnFileComments()
+"  call append(0, '/* File name   : ' . bufname("%"))
+"  call append(1, ' * authors     : ')
+"  call append(2, ' * created     : ' . strftime("%c"))
+"  call append(3, ' *')
+"  call append(4, ' */')
+"endfunction
+
+" --- cut here (configuration) ---
+
 " File: jcommenter.vim
 " Summary: Functions for documenting java-code
 " Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 11.8.2001
-" Version: 1.0 
+" Last Modified: 12.8.2001
+" Version: 1.1
 " Modifications:
+"  1.1 : Can now choose between '@throws' and '@exception' tags.
+"        When executed on single-line comments ("/** blah blah */") expands
+"            them into multiline comments preserving the text
+"        Partial method documentation comment updating (see below for
+"            description) At this point, there's a behavoiur fault where
+"            single-line comments get expanded even if there's no tags to add.
 "  1.0 : Did a complete rewrite of the script-code (this is the main reason
 "            for the version-number leap)
 "        A separate config-file, which should be modified to reflect the
@@ -20,8 +122,8 @@
 "        The comment-skeleton for fields is changed from '/**  */ to correspond
 "            with the Sun's code conventions:
 "            /**
-"	          *
-"	          */
+"             *
+"             */
 "  0.3 : Added tag copying
 "        Recognizes interfaces (same as classes)
 "  0.21: Improved the java-method recognition.
@@ -86,9 +188,22 @@
 "   Note: since the method header is on two lines, you need to specify
 "   the range (include everything before the '{', or ';' if the method is
 "   abstract). This can be done simply with line-wise visual selection.
+" - Updating method comments (since 1.1):
+"   If executed on a method declaration that allready has Doc-comments,
+"   you can let jcommenter to try to parse the existing comments and
+"   add the tags that are new (for example, if you have declared another
+"   exception to be thrown) to the comments. At this time (version 1.1) 
+"   the removing of old tags is limited to the @return-tag.
+"   See the config-script for variables concerning this feature.
 " - Field comments. Appends this above the field declaration:
 "        /**
 "         *
+"         */
+"   Can also be changed to '/**  */', see the config-file.
+" - Extending single-line comments into mulitline:
+"   When executed on a line like '/** blah blah blah */, the result is:
+"        /**
+"         * blah balh blah
 "         */
 " - When executed on an existing JavaDoc tag, copy that tag under that line.
 "   For example, when executed on the following line:
@@ -101,10 +216,12 @@
 "
 " Installation:
 " 
-" 1. Edit the jcommenter_config.vim-file. The config file is commented, so I
-"    won't explain the options here).
+" 0. (optional) copy-paste the configuration-part above to another file
+"    (save it somewhere)
+" 1. Edit the config-section. It is commented, so I won't explain the
+"    options here).
 " 2. Put something like
-"      autocmd FileType java source $VIM/jcommenter_config.vim
+"      autocmd FileType java source $VIM/macros/jcommenter_config.vim
 "      aurocmd FileType java source $VIM/macros/jcommenter.vim
 "    to your vimrc
 "
@@ -126,33 +243,41 @@
 " TODO: support for the umlaut-chars etc. that can be also used in java
 " TODO: Inner classes/interfaces...
 " TODO: Recognise and update old method comments.
-" TODO: Add an option to use @exception instead of @throws (for backward
-"       compatibility)
 " TODO: sort exceptions alphabetically (see
 "       http://java.sun.com/j2se/javadoc/writingdoccomments/index.html)
 " TODO: comment the script
+" TODO: unspaghettify the update-part of the script 
 "
 " Comments:
 " Send any comments or bugreports to bjorklid@st.jyu.fi
 " Happy coding!  ;-)
 "=====================================================================
 
+
+" THE SCRIPT
+"
+"
 " varible that tells what is put before the written string when using
 " the AppendStr-function.
 let s:indent = ''
 
 " The string that includes the text of the line on which the commenter
-" was called, or the whole range.
+" was called, or the whole range. This is what is parsed.
 let s:combinedString = ''
 
-let s:rangeStart = 1
-let s:rangeEnd = 1
+let s:rangeStart = 1 " line on which the range started
+let s:rangeEnd = 1   " line on which the range ended
 
 let s:defaultMethodDescriptionSpace = 1
 let s:defaultFieldDescriptionSpace = 1
 let s:defaultClassDescriptionSpace = 1
 
-let s:linesAppended = 0
+let s:linesAppended = 0 " this counter is increased when the AppendStr-method
+                        " is called.
+
+let s:docCommentStart = -1
+let s:docCommentEnd   = -1
+
 " ===================================================
 " Public functions
 " ===================================================
@@ -168,11 +293,196 @@ function! JCommentWriter() range
     call s:WriteMethodComments()
   elseif s:IsClass()
     call s:WriteClassComments()
+  elseif s:IsSinglelineComment()
+    call s:ExpandSinglelineComments(s:rangeStart)
   elseif s:IsCommentTag()
     call s:WriteCopyOfTag()
   elseif s:IsVariable()
     call s:WriteFieldComments()
   endif
+endfunction
+
+" ===================================================
+" The update functions for method comments
+" ===================================================
+
+function! s:UpdateAllTags()
+  "call s:ResolveMethodParams(s:combinedString)
+  let s:indent = s:GetIndentation(s:combinedString)
+  call s:UpdateParameters()
+  call s:UpdateReturnValue()
+  call s:UpdateExceptions()
+endfunction
+
+function! s:UpdateExceptions()
+  let exceptionName = s:GetNextThrowName()
+  let seeTagPos = s:FindTag(s:docCommentStart, s:docCommentEnd, 'see', '')
+  if seeTagPos > -1
+    let tagAppendPos = seeTagPos - 1
+  else
+    let tagAppendPos = s:docCommentEnd - 1
+  endif 
+  while exceptionName != ''
+    let tagPos = s:FindTag(s:docCommentStart, s:docCommentEnd, 'throws', exceptionName)
+    if tagPos < 0
+      let tagPos = s:FindTag(s:docCommentStart, s:docCommentEnd, 'exception', exceptionName)
+    endif
+    if tagPos > -1
+      let tagAppendPos = tagPos
+      let exceptionName = s:GetNextThrowName()
+      continue
+    endif
+    let s:appendPos = tagAppendPos
+    call s:AppendStr(' * @throws ' . exceptionName . ' ')
+    call s:MarkUpdateMade(tagAppendPos + 1)
+    let s:docCommentEnd = s:docCommentEnd + 1
+    let tagAppendPos = tagAppendPos + 1
+    let tagName = s:GetNextParameterName()
+  endwhile
+endfunction
+
+function! s:UpdateReturnValue()
+  if s:method_returnValue == ''
+    if exists("b:jcommenter_remove_tags_on_update") && b:jcommenter_remove_tags_on_update
+      call s:RemoveTag(s:docCommentStart, s:docCommentEnd, 'return', '')
+    endif
+    return
+  endif
+  let returnTagPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'return')
+  if returnTagPos > -1 && s:method_returnValue != ''
+    return
+  endif
+  let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'throws') - 1
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'exception') - 1
+  endif
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'see') - 1
+  endif
+  if tagAppendPos < 0
+    let tagAppendPos = s:docCommentEnd - 1
+  endif
+  let s:appendPos = tagAppendPos
+  call s:AppendStr(' * @return ')
+  call s:MarkUpdateMade(tagAppendPos + 1)
+  let s:docCommentEnd = s:docCommentEnd + 1
+endfunction
+
+function! s:UpdateParameters()
+  let tagName = s:GetNextParameterName()
+  let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'param') - 1
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'return') - 1
+  endif
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'throws') - 1
+  endif
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'exception') - 1
+  endif
+  if tagAppendPos < 0
+    let tagAppendPos = s:FindFirstTag(s:docCommentStart, s:docCommentEnd, 'see') - 1
+  endif
+  if tagAppendPos < 0 
+    let tagAppendPos = s:docCommentEnd - 1
+  endif
+  while tagName != ''
+    let tagPos = s:FindTag(s:docCommentStart, s:docCommentEnd, 'param', tagName)
+    if tagPos > -1
+      let tagAppendPos = tagPos
+      let tagName = s:GetNextParameterName()
+      continue
+    endif
+    let s:appendPos = tagAppendPos
+    call s:AppendStr(' * @param ' . tagName . ' ')
+    call s:MarkUpdateMade(tagAppendPos + 1)
+    let s:docCommentEnd = s:docCommentEnd + 1
+    let tagAppendPos = tagAppendPos + 1
+    let tagName = s:GetNextParameterName()
+  endwhile
+endfunction
+
+function! s:FindTag(rangeStart, rangeEnd, tagName, tagParam)
+  let i = a:rangeStart
+  while i <= a:rangeEnd
+    if getline(i) =~ '^\s*\(\*\s*\)\=@' . a:tagName . '\s\+' . a:tagParam
+      return i
+    endif
+    let i = i + 1
+  endwhile
+  return -1
+endfunction
+
+function! s:FindFirstTag(rangeStart, rangeEnd, tagName)
+  let i = a:rangeStart
+  while i <= a:rangeEnd
+    if getline(i) =~ '^\s*\(\*\s*\)\=@' . a:tagName . '\(\s\|$\)'
+      return i
+    endif
+    let i = i + 1
+  endwhile
+  return -1
+endfunction
+
+function! s:FindAnyTag(rangeStart, rangeEnd)
+  let i = a:rangeStart
+  while i <= a:rangeEnd
+    if getline(i) =~ '^\s*\(\*\s*\)\=@'
+      return i
+    endif
+    let i = i + 1
+  endwhile
+  return -1
+endfunction
+
+function! s:RemoveTag(rangeStart, rangeEnd, tagName, tagParam)
+  let tagStartPos = s:FindTag(a:rangeStart, a:rangeEnd, a:tagName, a:tagParam)
+  if tagStartPos == -1
+    return 0
+  endif
+  let tagEndPos = s:FindAnyTag(tagStartPos + 1, a:rangeEnd)
+  if tagEndPos == -1
+    tagEndPos = s:docCommentEnd - 1
+  endif
+  let linesToDelete = tagEndPos - tagStartPos
+  exe "normal " . tagStartPos . "G" . linesToDelete . "dd"
+  let s:docCommentEnd = s:docCommentEnd - linesToDelete
+endfunction
+
+function! s:MarkUpdateMade(linenum)
+  if s:firstUpdatedTagLine == -1 || a:linenum < s:firstUpdatedTagLine
+    let s:firstUpdatedTagLine = a:linenum
+  endif
+endfunction
+
+" ===================================================
+" From single line to multi line
+" ===================================================
+
+function! s:ExpandSinglelineCommentsEx(line, space)
+  let str = getline(a:line)
+  let singleLinePattern = '^\s*/\*\*\s*\(.*\)\*/\s*$'
+  if str !~ singleLinePattern
+    return
+  endif
+  let s:indent = s:GetIndentation(str)
+  let str = substitute(str, singleLinePattern, '\1', '')
+  exe "normal " . a:line . "Gdd"
+  let s:appendPos = a:line - 1
+  call s:AppendStr('/**')
+  call s:AppendStr(' * ' . str)
+  let i = 0
+  while a:space > i
+    call s:AppendStr(' * ')
+    let i = i + 1
+  endwhile
+  call s:AppendStr(' */')
+  let s:docCommentStart = a:line
+  let s:docCommentEnd   = a:line + 2 + a:space
+endfunction
+
+function! s:ExpandSinglelineComments(line)
+  call s:ExpandSinglelineCommentsEx(a:line, 0)
 endfunction
 
 " ===================================================
@@ -184,6 +494,23 @@ function! s:WriteMethodComments()
   let s:appendPos = s:rangeStart - 1
   let s:indent = s:method_indent
   let s:linesAppended = 0
+
+  let existingDocCommentType = s:HasDocComments()
+  
+  if existingDocCommentType && exists("b:jcommenter_update_comments") && b:jcommenter_update_comments
+    if existingDocCommentType == 1 
+      call s:ExpandSinglelineCommentsEx(s:singleLineCommentPos, 1)
+    endif
+    let s:firstUpdatedTagLine = -1
+    call s:UpdateAllTags()
+    if exists("b:jcommenter_move_cursor") && b:jcommenter_move_cursor && s:firstUpdatedTagLine != -1
+      exe "normal " . s:firstUpdatedTagLine . "G$"
+      if exists("b:jcommenter_autostart_insert_mode") && b:jcommenter_autostart_insert_mode
+        startinsert!
+      endif
+    endif
+    return
+  endif
 
   if exists("b:jcommenter_method_description_space")
     let descriptionSpace = b:jcommenter_method_description_space
@@ -211,8 +538,14 @@ function! s:WriteMethodComments()
     call s:AppendStr(' * @return ')
   endif
 
+  if exists("b:jcommenter_use_exception_tag") && b:jcommenter_use_exception_tag
+    let exTag = '@exception '
+  else
+    let exTag = '@throws '
+  endif
+
   while exception != ''
-    call s:AppendStr(' * @throws ' . exception . ' ')
+    call s:AppendStr(' * ' . exTag . exception . ' ')
     let exception = s:GetNextThrowName()
   endwhile
 
@@ -412,6 +745,10 @@ function! s:IsFileComments()
   return s:rangeStart <= 1 && s:rangeStart == s:rangeEnd
 endfunction
 
+function! s:IsSinglelineComment()
+  return s:combinedString =~ '^\s*/\*\*\(.*\)\*/\s*$'
+endfunction
+
 " Executed on a comment-tag?
 function! s:IsCommentTag()
   return s:combinedString =~ s:commentTagPattern 
@@ -434,7 +771,57 @@ function! s:IsVariable()
   return s:combinedString =~ s:javaVariablePattern
 endfunction
 
-  
+" Does the declaration allready have comments?
+function! s:HasMultilineDocComments()
+  let linenum = s:rangeStart - 1
+  let str = getline(linenum)
+  while str =~ '^\s*$' && linenum > 1
+    let linenum = linenum - 1
+    let str = getline(linenum)
+  endwhile
+  if str !~ '\*/\s*$' || str =~ '/\*\*.*\*/'
+    return 0
+  endif
+  let s:docCommentEnd = linenum
+  let linenum = linenum - 1
+  let str = getline(linenum)
+  while str !~ '\(/\*\|\*/\)' && linenum >= 1
+    let linenum = linenum - 1
+    let str = getline(linenum)
+  endwhile
+  if str =~ '^\s*/\*\*'
+    let s:docCommentStart = linenum
+    return 1
+  else
+    let s:docCommentStart = -1
+    let s:docCommentEnd   = -1
+    return 0
+  endif
+endfunction
+
+function! s:HasSingleLineDocComments()
+  let linenum = s:rangeStart - 1
+  let str = getline(linenum)
+  while str =~ '^\s*$' && linenum > 1
+    let linenum = linenum - 1
+    let str = getline(linenum)
+  endwhile
+  if str =~ '^\s*/\*\*.*\*/\s*$'
+    let s:singleLineCommentPos = linenum
+    let s:docCommentStart = linenum
+    let s:docCommentEnd   = linenum
+    return 1
+  endif
+  return 0
+endfunction
+
+function! s:HasDocComments()
+  if s:HasSingleLineDocComments()
+    return 1 
+  elseif s:HasMultilineDocComments()
+    return 2
+  endif
+endfunction
 
 " ===================================================
 " Utility functions
