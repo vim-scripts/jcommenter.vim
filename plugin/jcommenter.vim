@@ -1,15 +1,25 @@
 " File: jcommenter.vim
 " Summary: Functions for documenting java-code
 " Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 6.7.2001
-" Version: 0.4
+" Last Modified: 11.8.2001
+" Version: 1.0 
 " Modifications:
+"  1.0 : Did a complete rewrite of the script-code (this is the main reason
+"            for the version-number leap)
+"        A separate config-file, which should be modified to reflect the
+"            user's preferences
+"        More variables for better customization
+"        Due to the rewrite, should now be more robust (allthough new bugs
+"            may have been introduced during the process)
+"        Cursor movement and auto-start insert mode
+"        Better control over the look of the comment templates
+"        See installation instructions below (has changed)
 "  0.4 : Recognizes now methods that have whitespaces before the '('.
 "        The file comments can now be completely redefined (see below for
 "            instructions) without editing the script.
 "        The comment-skeleton for fields is changed from '/**  */ to correspond
 "            with the Sun's code conventions:
-"                /**
+"            /**
 "	          *
 "	          */
 "  0.3 : Added tag copying
@@ -17,7 +27,7 @@
 "  0.21: Improved the java-method recognition.
 "  0.2 : initial public release.
 " 
-" Tested on Vim 5.8
+" Tested on Vim 6.0ap on Win32
 "
 " Description: Functions for automatically generating JavaDoc compatible
 " documentation for java source-files.
@@ -27,7 +37,7 @@
 "   line of the file, a template for file comments is created. It looks like
 "   this:
 "
-"	/*  Filename : <name of current buffer>
+"       /*  Filename : <name of current buffer>
 "        *  Author   : <author>
 "        *  Summary  :
 "        *  Version  :
@@ -38,22 +48,8 @@
 "   field is filled with the contents of 'b:jcommenter_file_author'-variable.
 "   The automated date insertion can be prevented by defining the
 "   'b:jcommenter_file_noautotime'-variable.
-"   If you want to use another kind of skeleton for file comments, you can
-"   define the variable 'b:jcommenter_own_file_comments', and define the
-"   function 'OwnFileComments()' which will be called instead of the default
-"   file comment writer-function. You can use the variable 'a:firstline' to
-"   find out the line number where the function was called.
-"   An example of what I have in my .vimrc:
-"
-"       let b:jcommenter_own_file_comments='true'
-"       function! OwnFileComments()
-"           call append(a:firstline - 1, '/* File Name : ' . bufname("%"))
-"           call append(a:firstline    , ' * Author    : Kalle Björklid <bjorklid@st.jyu.fi>')
-"           call append(a:firstline + 1, ' * Created   : ' . strftime("%c"))
-"           call append(a:firstline + 2, ' * ')
-"           call append(a:firstline + 3, ' * Modifications:')
-"           call append(a:firstline + 4, ' */')
-"       endfunction
+"   You can redefine completely the file comments-writer-function. See the
+"   configuration script for more info
 "
 " - Class comments. When the JCommentWriter()-function is called on the
 "   header of a class, a template for class comments is created. It looks like
@@ -88,7 +84,7 @@
 "				IOException, NumberFormatException { 
 "
 "   Note: since the method header is on two lines, you need to specify
-"   the range (include everything before the '{' or ';' if the method is
+"   the range (include everything before the '{', or ';' if the method is
 "   abstract). This can be done simply with line-wise visual selection.
 " - Field comments. Appends this above the field declaration:
 "        /**
@@ -104,285 +100,407 @@
 "   RuntimeExceptions, or need to add another paramter.
 "
 " Installation:
-" I have these lines in my .vimrc:
-"   autocmd FileType java let b:jcommenter_class_author='<a href="mailto:bjorklid@st.jyu.fi">Kalle Bj&ouml;rklid</a>'
-"   autocmd FileType java let b:jcommenter_file_author='Kalle Björklid <bjorklid@st.jyu.fi>'
-"   autocmd FileType java source $VIM/macros/jcommenter.vim
-"   autocmd FileType java map <M-c> :call JCommentWriter()<CR>
-" Now you can probably figure out what you should/could add to your .vimrc ;-)
-" And, of course, you need to copy this file to where the source-parameter
-" points.
+" 
+" 1. Edit the jcommenter_config.vim-file. The config file is commented, so I
+"    won't explain the options here).
+" 2. Put something like
+"      autocmd FileType java source $VIM/jcommenter_config.vim
+"      aurocmd FileType java source $VIM/macros/jcommenter.vim
+"    to your vimrc
 "
 " Usage:
-" If you wrote the map-line just as it is written above to your .vimrc, you
+" If you didn't change the mapping specified in the config-file, you can
 " can trigger the comment-generation by pressing Alt-c (or "Meta-c"). As
 " described above, the cursor must be on the first line or on the same line
-" as the " method/class/attribute declaration in order to achieve something 
+" as the method/class/attribute declaration in order to achieve something 
 " useful. If the declaration extends to several lines, the range must be 
 " specified.  Range should include everything from the declaration that 
 " comes before the '{' or ';'. Everything after either of those characters 
-" is ignored.
+" is ignored, so linewise selection is a handy way to do this (<shift-v>)
 "
 " Notes: 
-"  - This is the first script for vim I've done, so be gentle ;-)
 "  - If a method name starts with an uppercase letter, it is handled as a
 "    constructor (no @return-tag is generated)
 "
 " TODO: better recognition for constructors
 " TODO: support for the umlaut-chars etc. that can be also used in java
-" TODO: make the script-code better.
-" TODO: move cursor to the start of the generated comment-template.
-"       (How do I move the cursor in a script w/ vim 5.8 ?)
 " TODO: Inner classes/interfaces...
 " TODO: Recognise and update old method comments.
 " TODO: Add an option to use @exception instead of @throws (for backward
 "       compatibility)
 " TODO: sort exceptions alphabetically (see
 "       http://java.sun.com/j2se/javadoc/writingdoccomments/index.html)
+" TODO: comment the script
+"
+" Comments:
+" Send any comments or bugreports to bjorklid@st.jyu.fi
+" Happy coding!  ;-)
+"=====================================================================
+
+" varible that tells what is put before the written string when using
+" the AppendStr-function.
+let s:indent = ''
+
+" The string that includes the text of the line on which the commenter
+" was called, or the whole range.
+let s:combinedString = ''
+
+let s:rangeStart = 1
+let s:rangeEnd = 1
+
+let s:defaultMethodDescriptionSpace = 1
+let s:defaultFieldDescriptionSpace = 1
+let s:defaultClassDescriptionSpace = 1
+
+let s:linesAppended = 0
+" ===================================================
+" Public functions
+" ===================================================
 
 function! JCommentWriter() range
-	" merge the lines of the range:
-	let line = a:firstline
-	let str = getline(line)
-	let line = line + 1
-	while line < a:lastline + 1
-		let str = str . ' ' . getline(line)
-		let line = line + 1
-	endwhile
-	
-	" decide which commneting function to use:
-	let javaname = '[a-zA-Z_][a-zA-Z0-9_]*'
-	let javaMethodPat   = javaname . '\s*(.*)'
-	let javaMethodPatNot = '='
-	let javaClassPat    = '\(class\|interface\)\s\+' . javaname
-	let brackets = '\(\s*\([\s*]\s\+\)\=\)'
-	let javaVariablePat = javaname . brackets . '\|\(\s\+\)' . javaname . brackets . '\|\(\s*\)' . '\(;\|=.*;\)'
-	let commentTagPat = '^\s*\*\s*@[a-zA-Z]\+'
-	if str =~ commentTagPat
-		call WriteCommentTag(str)
-	elseif str =~ javaMethodPat && str !~ javaMethodPatNot
-		call WriteMethodComments(str)
-	elseif str =~ javaClassPat
-		call WriteClassComments(str)
-	elseif str =~ javaVariablePat
-		call WriteVariableComments(str)
-	elseif a:firstline == 1
-		call WriteFileComments()
-	else
-		echo 'Nothing to comment'
-	endif
+  let s:rangeStart = a:firstline
+  let s:rangeEnd = a:lastline
+  let s:combinedString = s:GetCombinedString(s:rangeStart, s:rangeEnd)
+
+  if s:IsFileComments()
+    call s:WriteFileComments()
+  elseif s:IsMethod()
+    call s:WriteMethodComments()
+  elseif s:IsClass()
+    call s:WriteClassComments()
+  elseif s:IsCommentTag()
+    call s:WriteCopyOfTag()
+  elseif s:IsVariable()
+    call s:WriteFieldComments()
+  endif
 endfunction
 
-function! WriteFileComments()
-	let linenum = a:firstline - 1
-	if exists("b:jcommenter_own_file_comments")
-		call OwnFileComments()
-		return
-	endif
-	call append(linenum, '/*  Filename : ' . bufname("%"))
-	let indent = ' * '
-	let linenum = linenum + 1
-	let authorstr = ' Author   : '
-	if exists("b:jcommenter_file_author")
-		let authorstr = authorstr . b:jcommenter_file_author
-	endif
-	call append(linenum, indent . authorstr)
-	let linenum = linenum + 1
-	call append(linenum, indent . ' Summary  : ')
-	let linenum = linenum + 1
-	call append(linenum, indent . ' Version  : ')
-	let linenum = linenum + 1
-	if exists("b:jcommenter_file_noautotime")
-		let time = ''
-	else
-		let time = strftime("%c")
-	endif
-	call append(linenum, indent . ' Created  : ' . time)
-	let linenum = linenum + 1
-	call append(linenum, ' */')
+" ===================================================
+" Functions for writing the comments 
+" ===================================================
+
+function! s:WriteMethodComments()
+  call s:ResolveMethodParams(s:combinedString)
+  let s:appendPos = s:rangeStart - 1
+  let s:indent = s:method_indent
+  let s:linesAppended = 0
+
+  if exists("b:jcommenter_method_description_space")
+    let descriptionSpace = b:jcommenter_method_description_space
+  else
+    let descriptionSpace = s:defaultMethodDescriptionSpace
+  endif
+  
+  call s:AppendStr('/** ')
+
+  let param = s:GetNextParameterName()
+  let exception = s:GetNextThrowName()
+
+  if param == '' && s:method_returnValue == '' && exception == '' && exists("b:jcommenter_smart_method_description_spacing") && b:jcommenter_smart_method_description_spacing
+    call s:AppendStars(1)
+  else 
+    call s:AppendStars(descriptionSpace)
+  endif
+
+  while param != ''
+    call s:AppendStr(' * @param ' . param . ' ')
+    let param = s:GetNextParameterName()
+  endwhile
+
+  if s:method_returnValue != ''
+    call s:AppendStr(' * @return ')
+  endif
+
+  while exception != ''
+    call s:AppendStr(' * @throws ' . exception . ' ')
+    let exception = s:GetNextThrowName()
+  endwhile
+
+  call s:AppendStr(' */')
+
+  call s:MoveCursor()
+
 endfunction
 
-function! WriteCommentTag(str)
-	let linenum = a:firstline
-	let indent = GetIndent(a:str)
-	let starPat = '^\s*\*'
-	let tagBeginPat = starPat . '\s*@'
-	let tagBeginPos = matchend(a:str, tagBeginPat)
-	let posAfterStar = matchend(a:str, starPat)
-	let afterStarIndent = strpart(a:str, posAfterStar, tagBeginPos - posAfterStar - 1)
-	let tagEndPat = tagBeginPat . '[a-zA-Z]\+'
-	let tagName = strpart(a:str, tagBeginPos, matchend(a:str, tagEndPat) - tagBeginPos)
-	call append(linenum, indent . '*' . afterStarIndent . '@' . tagName)
+function! s:WriteCopyOfTag()
+  let tagName = substitute(s:combinedString, '.*\*\(\s*@\S\+\).*', '\1', '')
+  let s:indent = s:GetIndentation(s:combinedString)
+  let s:appendPos = s:rangeStart
+  call s:AppendStr('*' . tagName . ' ')
+  call s:MoveCursor()
 endfunction
 
-function! GetIndent(str)
-	let indentEndPos = matchend(a:str, '^\s*')
-	return strpart(a:str, 0 , indentEndPos)
+function! s:WriteFileComments()
+  let author = ''
+  if exists("*JCommenter_OwnFileComments")
+    call JCommenter_OwnFileComments()
+    return
+  endif
+  if exists("b:jcommenter_file_author")
+    let author = b:jcommenter_file_author
+  endif
+
+  if exists("b:jcommenter_file_noautotime") && b:jcommenter_file_noautotime
+    let created = ''
+  else
+    let created = strftime("%c")
+  endif
+
+  let s:appendPos = s:rangeStart - 1
+  let s:indent    = ''
+  call s:AppendStr('/* file name  : ' . bufname("%"))
+  if exists("b:jcommenter_file_author")
+    call s:AppendStr(' * authors    : ' . author)
+  endif
+  call s:AppendStr(' * created    : ' . created)
+  if exists("b:jcommenter_file_copyright")
+    call s:AppendStr(' * copyright  : ' . b:jcommenter_file_copyright)
+  endif
+  call s:AppendStr(' *')
+  call s:AppendStr(' * modifications:')
+  call s:AppendStr(' *')
+  call s:AppendStr(' */')
+endfunction  
+
+function! s:WriteFieldComments()
+  let s:appendPos = s:rangeStart - 1
+  let s:indent = s:GetIndentation(s:combinedString)
+  if exists("b:jcommenter_field_description_space")
+    let descriptionSpace = b:jcommenter_field_description_space
+  else
+    let descriptionSpace = s:defaultFieldDescriptionSpace
+  endif
+
+  if descriptionSpace == -1
+    call s:AppendStr('/**  */')
+    if exists("b:jcommenter_move_cursor")
+      normal k$hh
+      if exists("b:jcommenter_autostart_insert_mode")
+        startinsert
+      endif
+    endif
+  else
+    call s:AppendStr('/** ')
+    call s:AppendStars(descriptionSpace)
+    call s:AppendStr(' */')
+    call s:MoveCursor()
+  endif
+
 endfunction
 
-function! WriteVariableComments(argm)
-	let str = a:argm
-	let indent = GetIndent(str)
-	let linenum = a:firstline - 1
-	call append(linenum, indent . '/**')
-	let linenum = linenum + 1
-	call append(linenum, indent . ' *')
-	let linenum = linenum + 1
-	call append(linenum, indent . ' */')
+function! s:WriteClassComments()
+  let s:indent = s:GetIndentation(s:combinedString)
+
+  if exists("b:jcommenter_class_description_space")
+    let descriptionSpace = b:jcommenter_class_description_space
+  else
+    let descriptionSpace = s:defaultFieldDescriptionSpace
+  endif
+
+  let s:appendPos = s:rangeStart - 1
+
+  call s:AppendStr('/** ')
+
+  call s:AppendStars(descriptionSpace)
+
+  if exists('b:jcommenter_class_author')
+    call s:AppendStr(' * @author ' . b:jcommenter_class_author)
+  endif
+
+  if exists('b:jcommenter_class_version')
+    call s:AppendStr(' * @version ' . b:jcommenter_class_version)
+  endif
+
+  call s:AppendStr(' */')
+  call s:MoveCursor()
 endfunction
-	
 
-function! WriteClassComments(argm)
-	let str = a:argm
-	let indent = GetIndent(str)
-	let linenum = a:firstline - 1
-	call append(linenum, indent . '/**')
-	let linenum = linenum + 1
-	let indent = indent . ' *'
-	call append(linenum, indent)
-	let linenum = linenum + 1
-	let authorstr = ' @author '
-	if exists("b:jcommenter_class_author")
-		let authorstr = authorstr . b:jcommenter_class_author 
-	endif
-	call append(linenum, indent . authorstr)
-	let linenum = linenum + 1
-	let versionstring = ' @version '
-	if exists("b:jcommenter_class_def_version")
-		let versionstring = versionstring . b:jcommenter_class_def_version
-	endif
-	call append(linenum, indent . versionstring )
-	let linenum = linenum + 1
-	call append(linenum, indent . '/' )
+function! Test()
+  call s:ResolveMethodParams('    public static int argh(String str, int i) throws Exception1, Exception2 {')
+  let s:appendPos = 1
+  let s:indent = s:method_indent
+  call s:AppendStr(s:method_returnValue)
+  call s:AppendStr(s:method_paramList)
+  call s:AppendStr(s:method_throwsList)
+  let param = s:GetNextParameterName()
+  while param != '' 
+    call s:AppendStr(param)
+    let param = s:GetNextParameterName()
+  endwhile
+
+  let exc = s:GetNextThrowName()
+  while exc != ''
+    call s:AppendStr(exc)
+    let exc = s:GetNextThrowName()
+  endwhile
 endfunction
-	
-		
-function! WriteMethodComments(argm)
-	let str = a:argm
-	" don't need anything aftr '[{;]' 
-	let endPat = '\s*[{;]'
-	let endPos = match( str, endPat )
-	if endPos != -1
-		let str = strpart( str, 0, endPos )
-	endif
 
-	" get indent-blanks from beginning: (so that the comments can be indented)
-	let indentPat = '^\s*[a-zA-Z]'
-	let indentEndPos = matchend( str, indentPat ) - 1
-	if indentEndPos > 0
-		let indentStr = strpart(str, 0, indentEndPos)
-	else
-		let indentStr = ''
-		let indentEndPos = 0
-	endif
+" ===================================================
+" Functions to parse things
+" ===================================================
 
-	" pattern for ' functionName('
-	let namePat = '\s\+[a-zA-Z][a-zA-Z0-9]*\s*('
-	let constructorPat = '\(\s\|^\)[A-Z][a-zA-Z0-9]*\s*('
-	" pattern for ' ReturnType functionName('
-	let retPat = '[a-zA-Z][a-zA-Z0-9]*\s*\(\[\s*\]\)\=' . namePat
-	" index where the return type-str starts:
-	let paramEndPat = retPat . '.*)'
 
-	if str !~ constructorPat
-		" get return-type:
-		let preRetPos = match( str, retPat)
-		let postRetPos = match(str, namePat)
-		if preRetPos > 0 && postRetPos > 0
-			let returntype = strpart(str, preRetPos, postRetPos - preRetPos)
-			if returntype == 'void'  
-				let returntype = ''
-			endif
-		else
-			let returntype = ''
-		endif
-	else
-		let returntype = ''	" is constructor.
-	endif
+function! s:ResolveMethodParams(methodHeader)
+  let methodHeader = a:methodHeader
+  let methodHeader = substitute(methodHeader, '^\(.\{-}\)\s*[{;].*', '\1', '')
 
-	" get parameters:
-	let preParamPos = matchend(str, retPat)
-	let postParamPos = matchend(str, paramEndPat) - 1
-	if preParamPos > 0 && postParamPos > preParamPos
-		let parameterlist = strpart(str, preParamPos, postParamPos - preParamPos)
-	else
-		let parameterlist = ''
-	endif
+  let s:appendPos = s:rangeStart - 1
+  let s:method_indent = substitute(methodHeader, '^\(\s*\)\S.*', '\1', '')
 
-	let throwPat = paramEndPat . '\s*throws\s\+'
+  let preNameString = substitute(methodHeader, '^\(\(.*\)\s\)' . s:javaname . '\s*(.*', '\1', '')
+  let s:method_returnValue = substitute(preNameString, '\(.*\s\|^\)\(' . s:javaname . '\(\s*\[\s*\]\)*\)\s*$', '\2', '')
 
-	" get exceptions that might be thrown
-	let preThrowListPos = matchend(str, throwPat)
-	if preThrowListPos > 0
-		let throwlist = strpart(str, preThrowListPos, strlen(str) - preThrowListPos)
-	else
-		let throwlist = ''
-	endif
-	
-	" start the commenting
-	let linenum = a:firstline - 1
-	call append(linenum, indentStr . '/**')
-	let linenum = linenum + 1
-	let indentStr = indentStr . ' *'
-	call append(linenum, indentStr)
-	let linenum = linenum + 1
+  if s:method_returnValue == 'void' || s:IsConstructor(methodHeader)
+    let s:method_returnValue = ''
+  endif
 
-	" write the parameters: 
-	let brackets = '\s*\(\[\s*\]\)'
-	let finalParamPat = '^\s*final\s\+'
-	let paramStartPat = '^\s*\(final\s\+\)\=[a-zA-Z][a-zA-Z0-9]*\(\s*\[\s*\]\)\=\s\+'
-	" can end w/ ',' or '[] ,' or '[]' or paramEndPat might be -1 (this is handled later)
-	let paramEndPat = brackets . '\=\s*,\|' . brackets .'\s*$'
-	" parameterlist is now like this: 'type1 param1, type2 param2, ...'
-	" the next loop will create ' * @param <param-name> '-string for each parameter.
-	while parameterlist !~ '^\s*$'
-		let paramStartPos = matchend(parameterlist, paramStartPat)	
-		let paramEndPos = match(parameterlist, paramEndPat)
-		if paramStartPos < 0
-			break
-		endif
-		if paramEndPos < 0
-			let paramEndPos = strlen(parameterlist)
-		else
-			let paramEndPos = paramEndPos
-		endif
-	
-		let param = strpart(parameterlist, paramStartPos, paramEndPos - paramStartPos)
-		let paramFinalEndPos = matchend(param, finalParamPat)
-		if paramFinalEndPos >= 0
-			let param = strpart(param, paramFinalEndPos, strlen(param) - paramFinalEndPos)
-		endif
-		call append(linenum, indentStr . ' @param ' . param)
-		let linenum = linenum + 1
-		let parameterlist = strpart(parameterlist, paramEndPos + 1, strlen(parameterlist) - paramEndPos)
-	endwhile
+  let s:method_paramList = substitute(methodHeader, '.*(\(.*\)).*', '\1', '')
+  let s:method_paramList = s:Trim(s:method_paramList)
 
-	" if has returntype (and it's not 'void'), append a ' * @return '-string. 
-	if returntype != ''
-		call append(linenum, indentStr . ' @return ')
-		let linenum = linenum + 1
-	endif
-
-	" exceptions, handled much like the parameters.
-	let exceptionStartPat = '[a-zA-Z][a-zA-Z0-9]*\s*'
-	let exceptionEndPat = ','
-	while throwlist !~ '^\s*$'
-		let exceptionStartPos = match(throwlist, exceptionStartPat)	
-		let exceptionEndPos = matchend(throwlist, exceptionEndPat)
-		if exceptionStartPos < 0
-			break
-		endif
-		if exceptionEndPos < 0
-			let exceptionEndPos = strlen(throwlist)
-		else
-			let exceptionEndPos = exceptionEndPos - 1
-		endif
-	
-		let exception = strpart(throwlist, exceptionStartPos, exceptionEndPos - exceptionStartPos)
-		call append(linenum, indentStr . ' @throws ' . exception)
-		let linenum = linenum + 1
-		let throwlist = strpart(throwlist, exceptionEndPos + 1, strlen(throwlist) - exceptionEndPos)
-	endwhile
-	call append(linenum, indentStr . '/')
+  let s:method_throwsList = ''
+  if methodHeader =~ ')\s*throws\s'
+    let s:method_throwsList = substitute(methodHeader, '.*)\s*throws\s\+\(.\{-}\)\s*$', '\1', '')
+  endif
 endfunction
+
+function! s:IsConstructor(methodHeader)
+  return a:methodHeader =~ '\(^\|\s\)[A-Z][a-zA-Z0-9]*\s*('
+endfunction
+
+function! s:GetNextParameterName()
+  let result = substitute(s:method_paramList, '.\{-}\s\+\(' . s:javaname . '\)\s*\(,.*\|$\)', '\1', '')
+  if s:method_paramList !~ ','
+    let s:method_paramList = ''
+  else 
+     let endIndex = matchend(s:method_paramList, ',\s*')
+     let s:method_paramList = strpart(s:method_paramList, endIndex)
+  endif
+  return result
+endfunction!
+
+function! s:GetNextThrowName()
+  let result = substitute(s:method_throwsList, '\s*\(' . s:javaname . '\)\s*\(,.*\|$\)', '\1', '')
+  if match(s:method_throwsList, ',') == -1
+    let s:method_throwsList = ''
+  else
+    let s:method_throwsList = substitute(s:method_throwsList, '.\{-},\s*\(.*\)', '\1', '')
+  endif
+  return result
+endfunction
+
+" ===================================================
+" Functions to determine what is meant to be commented
+" ===================================================
+
+" pattern for java-names (like methods, classes, variablenames etc)
+let s:javaname = '[a-zA-Z_][a-zA-Z0-9_]*'
+
+let s:brackets = '\(s*\([\s*]\s\+\)\=\)'
+
+let s:javaMethodPattern     = '\(^\|\s\+\)' . s:javaname . '\s*(.*)\s*\(throws\|{\|;\|$\)'
+let s:javaMethodAntiPattern = '='
+
+let s:commentTagPattern     = '^\s*\*\=\s*@[a-zA-Z]\+\(\s\|$\)'
+
+let s:javaClassPattern	    = '\(^\|\s\)\(class\|interface\)\s\+' . s:javaname . '\({\|\s\|$\)'
+
+" FIXME: this might not be valid:
+let s:javaVariablePattern   = '\(\s\|^\)' . s:javaname . s:brackets . '.*\(;\|=.*;\)'
+
+" Should file comments be written?
+function! s:IsFileComments() 
+  return s:rangeStart <= 1 && s:rangeStart == s:rangeEnd
+endfunction
+
+" Executed on a comment-tag?
+function! s:IsCommentTag()
+  return s:combinedString =~ s:commentTagPattern 
+endfunction
+
+" Executed on a method declaration?
+function! s:IsMethod()
+  let str = s:combinedString
+
+  return str =~ s:javaMethodPattern && str !~ s:javaMethodAntiPattern
+endfunction
+
+" Executed on a class declaration?
+function! s:IsClass()
+  return s:combinedString =~ s:javaClassPattern
+endfunction
+
+" Executed on variable declaration?
+function! s:IsVariable()
+  return s:combinedString =~ s:javaVariablePattern
+endfunction
+
+  
+
+" ===================================================
+" Utility functions
+" ===================================================
+
+function! s:GetIndentation(string)
+  return substitute(a:string, '^\(\s*\).*', '\1', '')
+endfunction
+
+" returns one string combined from the strings on the given range.
+function! s:GetCombinedString(rangeStart, rangeEnd)
+  let line 	     = a:rangeStart
+  let combinedString = getline(line)
+
+  while line < a:rangeEnd
+    let line = line + 1
+    let combinedString = combinedString . ' ' . getline(line)
+  endwhile
+
+  return combinedString
+endfunction
+
+function! s:AppendStars(amount)
+  let i = a:amount
+  while i > 0
+    call s:AppendStr(' * ')
+    let i = i - 1
+  endwhile
+endfunction
+
+
+function! s:MoveCursorToEOL(line)
+  exe "normal " . a:line . "G$"
+endfunction
+
+function! s:MoveCursor() 
+  if !exists("b:jcommenter_move_cursor")
+    return
+  endif
+  if !b:jcommenter_move_cursor
+    return
+  endif
+  let startInsert = exists("b:jcommenter_autostart_insert_mode") && b:jcommenter_autostart_insert_mode
+  if exists("b:jcommenter_description_starts_from_first_line") && b:jcommenter_description_starts_from_first_line
+    call s:MoveCursorToEOL(s:rangeStart)
+  else
+    call s:MoveCursorToEOL(s:rangeStart + 1)
+  endif
+  if startInsert
+    startinsert
+  endif
+endfunction
+
+let s:appendPos = 1
+
+" A function for appending strings to the buffer.
+" First set the 's:appendPos', then call this function repeatedly to append
+" strings after that position.
+function! s:AppendStr(string)
+  call append(s:appendPos, s:indent . a:string)
+  let s:appendPos = s:appendPos + 1
+  let s:linesAppended = s:linesAppended + 1
+endfunction
+
+function! s:Trim(string)
+  return substitute(a:string, '^\s*\(.\{-}\)\s*$', '\1', '')
+endfunction
+
 
