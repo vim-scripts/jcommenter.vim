@@ -1,11 +1,19 @@
 " File: jcommenter.vim
 " Summary: Functions for documenting java-code
 " Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 16.6.2001
-" Version: 0.25
+" Last Modified: 6.7.2001
+" Version: 0.4
 " Modifications:
-"  0.3: Added tag copying
-"       Recognizes interfaces (same as classes)
+"  0.4 : Recognizes now methods that have whitespaces before the '('.
+"        The file comments can now be completely redefined (see below for
+"            instructions) without editing the script.
+"        The comment-skeleton for fields is changed from '/**  */ to correspond
+"            with the Sun's code conventions:
+"                /**
+"	          *
+"	          */
+"  0.3 : Added tag copying
+"        Recognizes interfaces (same as classes)
 "  0.21: Improved the java-method recognition.
 "  0.2 : initial public release.
 " 
@@ -30,6 +38,23 @@
 "   field is filled with the contents of 'b:jcommenter_file_author'-variable.
 "   The automated date insertion can be prevented by defining the
 "   'b:jcommenter_file_noautotime'-variable.
+"   If you want to use another kind of skeleton for file comments, you can
+"   define the variable 'b:jcommenter_own_file_comments', and define the
+"   function 'OwnFileComments()' which will be called instead of the default
+"   file comment writer-function. You can use the variable 'a:firstline' to
+"   find out the line number where the function was called.
+"   An example of what I have in my .vimrc:
+"
+"       let b:jcommenter_own_file_comments='true'
+"       function! OwnFileComments()
+"           call append(a:firstline - 1, '/* File Name : ' . bufname("%"))
+"           call append(a:firstline    , ' * Author    : Kalle Björklid <bjorklid@st.jyu.fi>')
+"           call append(a:firstline + 1, ' * Created   : ' . strftime("%c"))
+"           call append(a:firstline + 2, ' * ')
+"           call append(a:firstline + 3, ' * Modifications:')
+"           call append(a:firstline + 4, ' */')
+"       endfunction
+"
 " - Class comments. When the JCommentWriter()-function is called on the
 "   header of a class, a template for class comments is created. It looks like
 "   this:
@@ -65,8 +90,10 @@
 "   Note: since the method header is on two lines, you need to specify
 "   the range (include everything before the '{' or ';' if the method is
 "   abstract). This can be done simply with line-wise visual selection.
-" - Attribute comments. Simply puts "/**  */" on the line above of the
-"   attribute.
+" - Field comments. Appends this above the field declaration:
+"        /**
+"         *
+"         */
 " - When executed on an existing JavaDoc tag, copy that tag under that line.
 "   For example, when executed on the following line:
 "      * @throws IOException If cannot read file
@@ -108,6 +135,10 @@
 "       (How do I move the cursor in a script w/ vim 5.8 ?)
 " TODO: Inner classes/interfaces...
 " TODO: Recognise and update old method comments.
+" TODO: Add an option to use @exception instead of @throws (for backward
+"       compatibility)
+" TODO: sort exceptions alphabetically (see
+"       http://java.sun.com/j2se/javadoc/writingdoccomments/index.html)
 
 function! JCommentWriter() range
 	" merge the lines of the range:
@@ -121,11 +152,11 @@ function! JCommentWriter() range
 	
 	" decide which commneting function to use:
 	let javaname = '[a-zA-Z_][a-zA-Z0-9_]*'
-	let javaMethodPat   = javaname . '(.*)'
+	let javaMethodPat   = javaname . '\s*(.*)'
 	let javaMethodPatNot = '='
 	let javaClassPat    = '\(class\|interface\)\s\+' . javaname
-	let bracketsOrSpaces = '\(\s*\([\s*]\s*\)\=\s*\)\|\(\s'
-	let javaVariablePat = javaname . bracketsOrSpaces . '\+\)' . javaname . bracketsOrSpaces . '*\)' . '\(;\|=.*;\)'
+	let brackets = '\(\s*\([\s*]\s\+\)\=\)'
+	let javaVariablePat = javaname . brackets . '\|\(\s\+\)' . javaname . brackets . '\|\(\s*\)' . '\(;\|=.*;\)'
 	let commentTagPat = '^\s*\*\s*@[a-zA-Z]\+'
 	if str =~ commentTagPat
 		call WriteCommentTag(str)
@@ -144,6 +175,10 @@ endfunction
 
 function! WriteFileComments()
 	let linenum = a:firstline - 1
+	if exists("b:jcommenter_own_file_comments")
+		call OwnFileComments()
+		return
+	endif
 	call append(linenum, '/*  Filename : ' . bufname("%"))
 	let indent = ' * '
 	let linenum = linenum + 1
@@ -189,7 +224,11 @@ function! WriteVariableComments(argm)
 	let str = a:argm
 	let indent = GetIndent(str)
 	let linenum = a:firstline - 1
-	call append(linenum, indent . '/**  */')
+	call append(linenum, indent . '/**')
+	let linenum = linenum + 1
+	call append(linenum, indent . ' *')
+	let linenum = linenum + 1
+	call append(linenum, indent . ' */')
 endfunction
 	
 
@@ -238,8 +277,8 @@ function! WriteMethodComments(argm)
 	endif
 
 	" pattern for ' functionName('
-	let namePat = '\s\+[a-zA-Z][a-zA-Z0-9]*('
-	let constructorPat = '\(\s\|^\)[A-Z][a-zA-Z0-9]*('
+	let namePat = '\s\+[a-zA-Z][a-zA-Z0-9]*\s*('
+	let constructorPat = '\(\s\|^\)[A-Z][a-zA-Z0-9]*\s*('
 	" pattern for ' ReturnType functionName('
 	let retPat = '[a-zA-Z][a-zA-Z0-9]*\s*\(\[\s*\]\)\=' . namePat
 	" index where the return type-str starts:
@@ -341,3 +380,4 @@ function! WriteMethodComments(argm)
 	endwhile
 	call append(linenum, indentStr . '/')
 endfunction
+
