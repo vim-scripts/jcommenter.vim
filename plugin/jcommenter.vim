@@ -29,6 +29,9 @@ imap <M-n> <esc>:call SearchInvalidComment(0)<cr>a
 map <M-p> :call SearchInvalidComment(1)<cr>
 imap <M-p> <esc>:call SearchInvalidComment(1)<cr>a
 
+" modeline:
+let b:jcommenter_modeline = "/* vim: set " . (&et ? "et" : "noet") . " sw=" . &sw . " ts=" . &ts . ": */"
+.
 " A way to automate the creation of the comments. Works only if the
 " class/method declaration is on one row. Comments are generated when the
 " beginning '{' is entered, if the proper function/class declaration is found.
@@ -101,6 +104,21 @@ let b:jcommenter_file_noautotime = 0
 " comment-template is written
 let b:jcommenter_update_comments = 1
 
+" If you want to put some text where the parameter text, return text etc. would
+" normally go, uncomment and add the wanted text to these variables (this feature
+" is considered "unsupported", which means it will not work perfectly with every
+" other aspect of this script. For example, this will break the logic used to
+" find "invalid" comments, see mappings above):
+"let b:jcommenter_default_param  = ''
+"let b:jcommenter_default_return = ''
+"let b:jcommenter_default_throw  = ''
+
+" Another "unsupported" feature: define the number of lines added after each
+" "tag-group" (except exceptions, which is often the last group). does not work
+" well with comment updating currently:
+"let b:jcommenter_tag_space = 1
+
+
 " define wheter jcommenter should remove old tags (eg. if the return value was
 " changed from int to void). Will not work for exceptions, since it should not
 " remove RuntimeExceptions, and recognizing whether an exception is RTE is very
@@ -126,9 +144,12 @@ let b:jcommenter_remove_tags_on_update = 1
 " File:          jcommenter.vim
 " Summary:       Functions for documenting java-code
 " Author:        Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 24.10.2001
-" Version:       1.2
+" Last Modified: 18.11.2001
+" Version:       1.2.1
 " Modifications:
+"  1.2.1 : When executed on last line (must be empty), modeline gets generated.
+"          Option to have default @return, @param etc. values. see config.
+"          Option to have space between "Tag groups"
 "  1.2 : Complete method comment updating. Now removes '@param'-tags
 "            if the parameter does not exist in the method header.
 "            Set "b:jcommenter_remove_tags_on_update" to true if you want to
@@ -285,6 +306,8 @@ let b:jcommenter_remove_tags_on_update = 1
 "   comment, and <M-p> to go to previous one. Handy when finding 
 "   incomplete comments, and completing a template just generated (don't
 "   have to quit insert mode or use arrow keys).
+" - When executed on last line of the file (which must be empty) a
+"   modeline gets generated. See config-file for format.
 "
 " Installation:
 " 
@@ -293,9 +316,11 @@ let b:jcommenter_remove_tags_on_update = 1
 " 1. Edit the config-section. It is commented, so I won't explain the
 "    options here).
 " 2. Put something like
-"      autocmd FileType java source $VIM/macros/jcommenter_config.vim
 "      aurocmd FileType java source $VIM/macros/jcommenter.vim
-"    to your vimrc
+"      autocmd FileType java source $VIM/macros/jcommenter_config.vim
+"    to your vimrc. Note that loading the config-part after the actual
+"    script guarantees that your options are used instad of the script
+"    defaults.
 "
 " Usage:
 " If you didn't change the mapping specified in the config-file, you can
@@ -305,13 +330,13 @@ let b:jcommenter_remove_tags_on_update = 1
 " useful. If the declaration extends to several lines, the range must be 
 " specified.  Range should include everything from the declaration that 
 " comes before the '{' or ';'. Everything after either of those characters 
-" is ignored, so linewise selection is a handy way to do this (<shift-v>)
+" is ignored, so linewise selection is a handy way to do this
 "
 " Notes: 
 "  - If a method name starts with an uppercase letter, it is handled as a
 "    constructor (no @return-tag is generated)
 "
-" TODO: search for not-up-to-date comments
+" TODO: search for function etc not commented
 " TODO: support for the umlaut-chars etc. that can be also used in java
 " TODO: Inner classes/interfaces...
 " TODO: sort exceptions alphabetically (see
@@ -348,6 +373,10 @@ let s:linesAppended = 0 " this counter is increased when the AppendStr-method
 let s:docCommentStart = -1
 let s:docCommentEnd   = -1
 
+let s:defaultParamText  = (exists('b:jcommenter_default_param'))  ? b:jcommenter_default_param : ''
+let s:defaultReturnText = (exists('b:jcommenter_default_return')) ? b:jcommenter_default_return : ''
+let s:defaultThrowText  = (exists('b:jcommenter_default_throw'))   ? b:jcommenter_default_throw : ''
+
 " ===================================================
 " Public functions
 " ===================================================
@@ -365,6 +394,8 @@ function! JCommentWriter() range
 
   if s:IsFileComments()
     call s:WriteFileComments()
+  elseif s:IsModeLine()
+    call s:WriteModeLine()
   elseif s:IsFunctionEnd()
     call s:WriteFunctionEndComments()
   elseif s:IsExceptionDeclaration()
@@ -421,7 +452,7 @@ function! s:UpdateExceptions()
       continue
     endif
     let s:appendPos = tagAppendPos
-    call s:AppendStr(' * @throws ' . exceptionName . ' ')
+    call s:AppendStr(' * @throws ' . exceptionName . ' ' . s:defaultThrowText)
     call s:MarkUpdateMade(tagAppendPos + 1)
     let s:docCommentEnd = s:docCommentEnd + 1
     let tagAppendPos = tagAppendPos + 1
@@ -451,7 +482,7 @@ function! s:UpdateReturnValue()
     let tagAppendPos = s:docCommentEnd - 1
   endif
   let s:appendPos = tagAppendPos
-  call s:AppendStr(' * @return ')
+  call s:AppendStr(' * @return ' . s:defaultReturnText)
   call s:MarkUpdateMade(tagAppendPos + 1)
   let s:docCommentEnd = s:docCommentEnd + 1
 endfunction
@@ -516,7 +547,7 @@ function! s:UpdateParameters()
       continue
     endif
     let s:appendPos = tagAppendPos
-    call s:AppendStr(' * @param ' . tagName . ' ')
+    call s:AppendStr(' * @param ' . tagName . ' ' . s:defaultParamText)
     call s:MarkUpdateMade(tagAppendPos + 1)
     let s:docCommentEnd = s:docCommentEnd + 1
     let tagAppendPos = tagAppendPos + 1
@@ -661,14 +692,26 @@ function! s:WriteMethodComments()
     call s:AppendStars(descriptionSpace)
   endif
 
+  let hadParam = (param != '')
+
   while param != ''
-    call s:AppendStr(' * @param ' . param . ' ')
+    call s:AppendStr(' * @param ' . param . ' ' . s:defaultParamText)
     let param = s:GetNextParameterName()
   endwhile
 
+  if exists('b:jcommenter_tag_space') && b:jcommenter_tag_space && hadParam
+    call s:AppendStars(b:jcommenter_tag_space)
+  endif
+
+  let hadReturn = (s:method_returnValue != '')
+
   if s:method_returnValue != ''
-    call s:AppendStr(' * @return ')
+    call s:AppendStr(' * @return ' . s:defaultReturnText)
     let s:debugstring = s:debugstring . 'wroteReturnTag '
+  endif
+
+  if exists('b:jcommenter_tag_space') && b:jcommenter_tag_space && hadReturn
+    call s:AppendStars(b:jcommenter_tag_space)
   endif
 
   if exists("b:jcommenter_use_exception_tag") && b:jcommenter_use_exception_tag
@@ -677,8 +720,10 @@ function! s:WriteMethodComments()
     let exTag = '@throws '
   endif
 
+"  let hadException = (exception != '')
+
   while exception != ''
-    call s:AppendStr(' * ' . exTag . exception . ' ')
+    call s:AppendStr(' * ' . exTag . exception . ' ' . s:defaultThrowText)
     let exception = s:GetNextThrowName()
   endwhile
 
@@ -719,7 +764,7 @@ function! s:WriteFoundException()
     let s:appendPos = s:docCommentEnd - 1
   endif
   let s:indent = s:GetIndentation(getline(s:appendPos))
-  call s:AppendStr('* ' . '@throws ' . exceptionName . ' ')
+  call s:AppendStr('* ' . '@throws ' . exceptionName . ' ' . s:defaultThrowText)
   let oldStart = s:rangeStart "kludge
   let s:rangeStart = s:appendPos - 1
   call s:MoveCursor()
@@ -732,6 +777,14 @@ function! s:WriteCopyOfTag()
   let s:appendPos = s:rangeStart
   call s:AppendStr('*' . tagName . ' ')
   call s:MoveCursor()
+endfunction
+
+function! s:WriteModeLine()
+  let s:appendPos = s:rangeStart
+  let s:indent    = ''
+  if exists("b:jcommenter_modeline")
+    call s:AppendStr(b:jcommenter_modeline)
+  endif
 endfunction
 
 function! s:WriteFileComments()
@@ -930,6 +983,10 @@ endfunction
 " Should file comments be written?
 function! s:IsFileComments() 
   return s:rangeStart <= 1 && s:rangeStart == s:rangeEnd
+endfunction
+
+function! s:IsModeLine()
+  return s:rangeStart == line("$") && s:combinedString =~ '^\s*$'
 endfunction
 
 function! s:IsSinglelineComment()
@@ -1159,3 +1216,4 @@ function! ConditionalWriter()
   endif
 endfunction
 
+" vim: set et sw=2 ts=2:
