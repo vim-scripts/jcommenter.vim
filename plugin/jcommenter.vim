@@ -1,8 +1,15 @@
 " File: jcommenter.vim
 " Summary: Functions for documenting java-code
 " Author: Kalle Björklid <bjorklid@st.jyu.fi>
-" Last Modified: 13.6.2001
-" Version: 0.2 beta
+" Last Modified: 16.6.2001
+" Version: 0.25
+" Modifications:
+"  0.3: Added tag copying
+"       Recognizes interfaces (same as classes)
+"  0.21: Improved the java-method recognition.
+"  0.2 : initial public release.
+" 
+" Tested on Vim 5.8
 "
 " Description: Functions for automatically generating JavaDoc compatible
 " documentation for java source-files.
@@ -60,6 +67,14 @@
 "   abstract). This can be done simply with line-wise visual selection.
 " - Attribute comments. Simply puts "/**  */" on the line above of the
 "   attribute.
+" - When executed on an existing JavaDoc tag, copy that tag under that line.
+"   For example, when executed on the following line:
+"      * @throws IOException If cannot read file
+"   the result is:
+"      * @throws IOException If cannot read file
+"      * @throws
+"   Not that life changing, but quite nice when you want to document those
+"   RuntimeExceptions, or need to add another paramter.
 "
 " Installation:
 " I have these lines in my .vimrc:
@@ -82,13 +97,17 @@
 " is ignored.
 "
 " Notes: 
-"  - this file contains the first vim-functions I've done, so be gentle ;-)
+"  - This is the first script for vim I've done, so be gentle ;-)
+"  - If a method name starts with an uppercase letter, it is handled as a
+"    constructor (no @return-tag is generated)
 "
-" TODO: proper testing w/ differend kinds of output
 " TODO: better recognition for constructors
 " TODO: support for the umlaut-chars etc. that can be also used in java
-" TODO: make the script-code less obfuscated (and perhaps faster).
+" TODO: make the script-code better.
 " TODO: move cursor to the start of the generated comment-template.
+"       (How do I move the cursor in a script w/ vim 5.8 ?)
+" TODO: Inner classes/interfaces...
+" TODO: Recognise and update old method comments.
 
 function! JCommentWriter() range
 	" merge the lines of the range:
@@ -103,10 +122,14 @@ function! JCommentWriter() range
 	" decide which commneting function to use:
 	let javaname = '[a-zA-Z_][a-zA-Z0-9_]*'
 	let javaMethodPat   = javaname . '(.*)'
-	let javaClassPat    = 'class\s\+' . javaname
+	let javaMethodPatNot = '='
+	let javaClassPat    = '\(class\|interface\)\s\+' . javaname
 	let bracketsOrSpaces = '\(\s*\([\s*]\s*\)\=\s*\)\|\(\s'
 	let javaVariablePat = javaname . bracketsOrSpaces . '\+\)' . javaname . bracketsOrSpaces . '*\)' . '\(;\|=.*;\)'
-	if str =~ javaMethodPat
+	let commentTagPat = '^\s*\*\s*@[a-zA-Z]\+'
+	if str =~ commentTagPat
+		call WriteCommentTag(str)
+	elseif str =~ javaMethodPat && str !~ javaMethodPatNot
 		call WriteMethodComments(str)
 	elseif str =~ javaClassPat
 		call WriteClassComments(str)
@@ -142,6 +165,19 @@ function! WriteFileComments()
 	call append(linenum, indent . ' Created  : ' . time)
 	let linenum = linenum + 1
 	call append(linenum, ' */')
+endfunction
+
+function! WriteCommentTag(str)
+	let linenum = a:firstline
+	let indent = GetIndent(a:str)
+	let starPat = '^\s*\*'
+	let tagBeginPat = starPat . '\s*@'
+	let tagBeginPos = matchend(a:str, tagBeginPat)
+	let posAfterStar = matchend(a:str, starPat)
+	let afterStarIndent = strpart(a:str, posAfterStar, tagBeginPos - posAfterStar - 1)
+	let tagEndPat = tagBeginPat . '[a-zA-Z]\+'
+	let tagName = strpart(a:str, tagBeginPos, matchend(a:str, tagEndPat) - tagBeginPos)
+	call append(linenum, indent . '*' . afterStarIndent . '@' . tagName)
 endfunction
 
 function! GetIndent(str)
